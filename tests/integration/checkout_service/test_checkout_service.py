@@ -1,11 +1,13 @@
 import pytest
+from unittest.mock import patch, MagicMock
 from sqlalchemy import select, func
 from fastapi import HTTPException
+import stripe
 from services.checkout import CheckoutService
 from services.cart import CartService
 from models.cart_items import CartItem
 from models.inventory_changes import InventoryChange
-from models.enums import PaymentMethod
+from models.enums import PaymentMethod, PaymentStatus
 
 
 async def test_checkout_success(session, verified_user, product_factory, test_address):
@@ -121,3 +123,62 @@ async def test_checkout_stock_equivalent(session, verified_user, product_factory
     # Stock hits exactly zero
     await session.refresh(product)
     assert product.stock == 0
+
+
+def _mock_stripe_session(session_id="cs_test_123", url="https://checkout.stripe.com/pay/cs_test_123"):
+    mock_session = MagicMock()
+    mock_session.id = session_id
+    mock_session.url = url
+    return mock_session
+
+
+async def test_stripe_checkout_creates_order_without_decrementing_stock(session, verified_user, product_factory, test_address):
+    """Stripe checkout creates an UNPAID order with session ID but does not decrement stock or clear cart."""
+    product = await product_factory(name="Laptop", price=1000.00, stock=10)
+    await CartService.add_to_cart(db=session, user_id=verified_user.id, product_id=product.id, quantity=2)
+
+    with patch("services.checkout.stripe.checkout.Session.create", return_value=_mock_stripe_session()):
+        order = await CheckoutService.checkout(db=session, user_id=verified_user.id, address_id=test_address.id, payment_method=PaymentMethod.STRIPE)
+
+    assert order.payment_method == PaymentMethod.STRIPE
+    assert order.payment_status == PaymentStatus.UNPAID
+    assert order.stripe_checkout_session_id == "cs_test_123"
+    assert order.checkout_url == "https://checkout.stripe.com/pay/cs_test_123"
+    # Stock not decremented
+    await session.refresh(product)
+    assert product.stock == 10
+    # Cart not cleared
+    cart_count = await session.scalar(
+        select(func.count()).select_from(CartItem).where(CartItem.user_id == verified_user.id)
+    )
+    assert cart_count == 1
+
+
+async def test_stripe_checkout_failure_marks_order_failed(session, verified_user, product_factory, test_address):
+    """When Stripe API raises StripeError, the order is marked FAILED and 502 is raised."""
+    product = await product_factory(name="Laptop", price=1000.00, stock=10)
+    await CartService.add_to_cart(db=session, user_id=verified_user.id, product_id=product.id, quantity=1)
+
+    with patch("services.checkout.stripe.checkout.Session.create", side_effect=stripe.StripeError("Stripe unavailable")):
+        with pytest.raises(HTTPException) as exc:
+            await CheckoutService.checkout(db=session, user_id=verified_user.id, address_id=test_address.id, payment_method=PaymentMethod.STRIPE)
+
+    assert exc.value.status_code == 502
+    # Stock not decremented
+    await session.refresh(product)
+    assert product.stock == 10
+
+
+async def test_stripe_reuse_if_valid_returns_existing_order(session, verified_user, product_factory, test_address):
+    """If an UNPAID Stripe order with a session already exists, it is returned without creating a new order."""
+    product = await product_factory(name="Laptop", price=1000.00, stock=10)
+    await CartService.add_to_cart(db=session, user_id=verified_user.id, product_id=product.id, quantity=1)
+
+    with patch("services.checkout.stripe.checkout.Session.create", return_value=_mock_stripe_session()):
+        first_order = await CheckoutService.checkout(db=session, user_id=verified_user.id, address_id=test_address.id, payment_method=PaymentMethod.STRIPE)
+
+    with patch("services.checkout.stripe.checkout.Session.retrieve", return_value=_mock_stripe_session()):
+        second_order = await CheckoutService.checkout(db=session, user_id=verified_user.id, address_id=test_address.id, payment_method=PaymentMethod.STRIPE)
+
+    assert first_order.id == second_order.id
+    assert second_order.checkout_url == "https://checkout.stripe.com/pay/cs_test_123"

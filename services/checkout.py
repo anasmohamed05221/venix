@@ -9,8 +9,12 @@ from models.products import Product
 from models.addresses import Address
 from services.cart import CartService
 from models.inventory_changes import InventoryChange
-from models.enums import InventoryChangeReason, PaymentMethod, OrderStatus
+from models.enums import InventoryChangeReason, PaymentMethod, OrderStatus, PaymentStatus
 from utils.logger import get_logger
+import stripe
+from core.config import settings
+
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
 logger = get_logger(__name__)
 
@@ -76,6 +80,42 @@ class CheckoutService:
             inventory_changes.append(inventory_change)
             product.stock -= item.quantity
         return (order_items, inventory_changes)
+    
+
+    @staticmethod
+    async def _create_stripe_session(db: AsyncSession, user_id: int, order: Order, cart_items: list[CartItem]) -> Order:
+        """Create a Stripe Checkout Session for the given order and attach the session ID.
+
+        On success: saves the session ID to the order and returns the order with checkout_url set.
+        On Stripe failure: marks the order as FAILED, commits, and raises 502.
+        """
+        line_items = [{
+                    "price_data": {"currency": "egp", "unit_amount": int(item.product.price * 100),
+                    "product_data": {"name": item.product.name}},
+                    "quantity": item.quantity
+                    } for item in cart_items]
+
+        try:
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=line_items,
+                mode="payment",
+                success_url=settings.FRONTEND_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
+                cancel_url=settings.FRONTEND_CANCEL_URL,
+                metadata={"order_id": order.id},
+                idempotency_key=f"checkout-{order.id}"
+            )
+            order.stripe_checkout_session_id = session.id
+            await db.commit()
+            order_eagered = await db.scalar(select(Order).options(joinedload(Order.items).joinedload(OrderItem.product)).where(Order.id==order.id))
+            order_eagered.checkout_url = session.url
+            return order_eagered
+        except stripe.StripeError as e:
+            order.payment_status = PaymentStatus.FAILED
+            await db.commit()
+            logger.error("Stripe session creation failed", extra={"order_id": order.id, "error": str(e)})
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Payment provider unavailable, please try again later")
+        
 
 
     @staticmethod
@@ -92,6 +132,24 @@ class CheckoutService:
         
         # Fetch user's cart items
         cart_items = await CheckoutService._validate_cart(db, user_id)
+
+        # reuse-if-valid check for stripe session
+        if payment_method == PaymentMethod.STRIPE:
+            existing_order = await db.scalar(
+                select(Order)
+                .options(joinedload(Order.items).joinedload(OrderItem.product))
+                .where(
+                    Order.user_id == user_id,
+                    Order.payment_method == PaymentMethod.STRIPE,
+                    Order.payment_status == PaymentStatus.UNPAID,
+                    Order.stripe_checkout_session_id.isnot(None)
+                )
+            )
+            if existing_order:
+                session = stripe.checkout.Session.retrieve(existing_order.stripe_checkout_session_id)
+                existing_order.checkout_url = session.url
+                return existing_order
+
         # Create order
         total_amount = CartService.calculate_cart_total_price(cart_items)
         order = Order(
@@ -103,6 +161,10 @@ class CheckoutService:
         )
         db.add(order)
         await db.flush()
+
+        if payment_method == PaymentMethod.STRIPE:
+            stripe_order = await CheckoutService._create_stripe_session(db, user_id, order, cart_items)
+            return stripe_order
 
         # Create order items and inventory changes
         order_items, inventory_changes = await CheckoutService._process_cart_items(db, user_id, cart_items, order)

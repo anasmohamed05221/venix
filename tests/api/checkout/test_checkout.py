@@ -1,8 +1,16 @@
 import pytest
+from unittest.mock import patch, MagicMock
+import stripe
 
 
-# ─── Authentication ───────────────────────────────────────────────────────────
+def _mock_stripe_session(session_id="cs_test_123", url="https://checkout.stripe.com/pay/cs_test_123"):
+    mock_session = MagicMock()
+    mock_session.id = session_id
+    mock_session.url = url
+    return mock_session
 
+
+# Authentication
 
 @pytest.mark.asyncio
 async def test_checkout_requires_auth(client):
@@ -12,8 +20,7 @@ async def test_checkout_requires_auth(client):
     assert response.status_code == 401
 
 
-# ─── POST /orders/ ────────────────────────────────────────────────────────────
-
+# COD path
 
 @pytest.mark.asyncio
 async def test_checkout_success(client, user_token, product_factory, test_address):
@@ -149,3 +156,46 @@ async def test_checkout_invalid_address(client, user_token, product_factory):
     )
 
     assert response.status_code == 404
+
+
+# Stripe path
+
+@pytest.mark.asyncio
+async def test_stripe_checkout_returns_checkout_url(client, user_token, product_factory, test_address):
+    """Stripe checkout returns 201 with a checkout_url and empty items (stock not decremented yet)."""
+    product = await product_factory(name="Laptop", price=1000.00, stock=10)
+
+    await client.post("/cart/", json={"product_id": product.id, "quantity": 1},
+                      headers={"Authorization": f"Bearer {user_token}"})
+
+    with patch("services.checkout.stripe.checkout.Session.create", return_value=_mock_stripe_session()):
+        response = await client.post(
+            "/orders/",
+            json={"address_id": test_address.id, "payment_method": "stripe"},
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["payment_method"] == "stripe"
+    assert data["payment_status"] == "unpaid"
+    assert data["checkout_url"] == "https://checkout.stripe.com/pay/cs_test_123"
+    assert data["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_stripe_checkout_failure_returns_502(client, user_token, product_factory, test_address):
+    """Stripe checkout returns 502 when the Stripe API is unavailable."""
+    product = await product_factory(name="Laptop", price=1000.00, stock=10)
+
+    await client.post("/cart/", json={"product_id": product.id, "quantity": 1},
+                      headers={"Authorization": f"Bearer {user_token}"})
+
+    with patch("services.checkout.stripe.checkout.Session.create", side_effect=stripe.StripeError("unavailable")):
+        response = await client.post(
+            "/orders/",
+            json={"address_id": test_address.id, "payment_method": "stripe"},
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+
+    assert response.status_code == 502

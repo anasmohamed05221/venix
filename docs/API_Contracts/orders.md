@@ -18,25 +18,27 @@ Request body:
 
 {
   "address_id": 1,
-  "payment_method": "cod"
+  "payment_method": "cod"   // or "stripe"
 }
 
 ## Validation Rules
 
 - `address_id`: required, must be an address belonging to the current user.
-- `payment_method`: required, must be `"cod"` (MVP only).
+- `payment_method`: required, must be `"cod"` or `"stripe"`.
 
 ---
 
 ## Response (201 Created)
 
-Example:
+**COD example:**
 
 {
   "id": 7,
   "total_amount": 1050.00,
   "status": "pending",
+  "payment_status": "unpaid",
   "payment_method": "cod",
+  "checkout_url": null,
   "items": [
     {
       "id": 1,
@@ -55,15 +57,31 @@ Example:
   "updated_at": "2026-04-12T10:00:00"
 }
 
+**Stripe example:**
+
+{
+  "id": 8,
+  "total_amount": 1050.00,
+  "status": "pending",
+  "payment_status": "unpaid",
+  "payment_method": "stripe",
+  "checkout_url": "https://checkout.stripe.com/pay/cs_test_...",
+  "items": [...],
+  "created_at": "2026-04-12T10:00:00",
+  "updated_at": "2026-04-12T10:00:00"
+}
+
 ---
 
 ## Notes
 
 - The cart must be non-empty.
-- Stock is validated before and after acquiring a row-level lock (pessimistic locking / SELECT FOR UPDATE).
-- On success: order is created, stock is decremented, cart is cleared — all atomically.
-- `price_at_time` reflects the product price at moment of purchase (price snapshot).
 - `address_id` must belong to the authenticated user.
+- **COD path:** stock is decremented and cart is cleared atomically at checkout. `checkout_url` is null.
+- **Stripe path:** stock is NOT decremented at checkout. A Stripe Checkout Session is created and `checkout_url` is returned. The user completes payment on Stripe's hosted page. Stock is decremented only when the webhook confirms payment (SCRUM-120).
+- **Reuse-if-valid:** if the user already has an UNPAID Stripe order with an open session, the existing `checkout_url` is returned without creating a new order or session.
+- Stock is validated before and after acquiring a row-level lock (pessimistic locking / SELECT FOR UPDATE) on the COD path.
+- `price_at_time` reflects the product price at moment of purchase (price snapshot).
 
 ---
 
@@ -72,9 +90,10 @@ Example:
 - `400 Bad Request` — cart is empty.
 - `401 Unauthorized` — missing or invalid token.
 - `404 Not Found` — address not found or belongs to another user.
-- `409 Conflict` — insufficient stock for one or more items.
-- `422 Unprocessable Entity` — missing required fields.
+- `409 Conflict` — insufficient stock for one or more items (COD path only).
+- `422 Unprocessable Entity` — missing required fields or invalid payment_method.
 - `429 Too Many Requests` — rate limit exceeded.
+- `502 Bad Gateway` — Stripe API unavailable. Order is marked FAILED; no stock is decremented.
 
 ---
 
@@ -158,7 +177,9 @@ Example:
   "id": 1,
   "total_amount": 1050.00,
   "status": "pending",
+  "payment_status": "unpaid",
   "payment_method": "cod",
+  "checkout_url": null,
   "items": [
     {
       "id": 1,

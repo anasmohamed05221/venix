@@ -40,11 +40,16 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Connecting to Redis...")
     await redis_client.connect()
+
     if settings.ENV == "production" and not limiter.enabled:
         raise RuntimeError(
             "CRITICAL: Rate limiter is disabled in production! "
             "Check ENV configuration."
         )
+    
+    if settings.ENV != "development" and not settings.STRIPE_SECRET_KEY.startswith("sk_test_"):
+        logger.critical("Stripe live key detected, aborting startup")
+        raise RuntimeError("CRITICAL: Stripe live keys are not allowed in this codebase.")
 
     logger.info("Application startup complete", extra={"event": "startup"})
     yield

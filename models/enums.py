@@ -20,3 +20,11 @@ class UserRole(str, Enum):
 
 class PaymentMethod(str, Enum):
     COD = "cod"
+    STRIPE = "stripe"
+
+class PaymentStatus(str, Enum):
+    UNPAID = "unpaid"
+    PAID = "paid"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+    EXPIRED = "expired"

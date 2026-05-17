@@ -73,7 +73,7 @@ Built as a deliberate learning exercise to practice backend engineering the way 
 | 🔒 **Race conditions prevented at the DB level** | Checkout uses `SELECT FOR UPDATE` to lock the product row before reading stock. Two concurrent checkouts for the last unit cannot both succeed. |
 | 🔄 **Token rotation with reuse detection** | On every refresh, the old token is revoked and a new pair issued. Presenting a revoked token is treated as a security event. |
 | 🔀 **Full async data layer** | Entire stack runs on one event loop: async routes, async SQLAlchemy 2.0 (asyncpg), async Redis. Migrated as a dedicated refactor story before adding Stripe and Celery. |
-| 🧪 **Test suite engineered for speed** | 412 tests in ~11s. Savepoint-based isolation, parallel execution via `pytest-xdist`, passwords pre-hashed once at module load. Was 194 tests in ~70s before optimization. |
+| 🧪 **Test suite engineered for speed** | 413 tests in ~11s. Savepoint-based isolation, parallel execution via `pytest-xdist`, passwords pre-hashed once at module load. Was 194 tests in ~70s before optimization. |
 | ⚙️ **Order status FSM** | `PENDING → CONFIRMED → SHIPPED → COMPLETED`. Skipping or reversing states raises a 409. Cancellation is a separate path with different rules per role. |
 | 💰 **Price snapshots at purchase time** | `order_items.price_at_time` captures the price at checkout. Changing a product price never affects existing orders. |
 | ⚡ **Redis for caching and rate limiting** | Cache-aside pattern with explicit invalidation on writes. Rate limiting counters shared across Gunicorn workers so limits cannot be bypassed. |
@@ -226,7 +226,7 @@ erDiagram
 
 ## Test Suite
 
-**412 tests**: unit, integration, API, and middleware layers, running against a real PostgreSQL database for Dev/Prod parity.
+**413 tests**: unit, integration, API, and middleware layers, running against a real PostgreSQL database for Dev/Prod parity.
 
 ```
 tests/
@@ -248,7 +248,7 @@ The setup is engineered, not just functional:
 - **No bcrypt in fixtures** : passwords pre-hashed once at module load. JWT tokens generated directly without HTTP round-trips. Bcrypt cost is not paid on every test.
 - **Worker-scoped emails** : fixture emails include the xdist worker ID, preventing unique-constraint collisions under parallel execution.
 
-> Before optimization: 194 tests in ~70s, After: 412 tests in ~11s
+> Before optimization: 194 tests in ~70s, After: 413 tests in ~11s
 
 ---
 
@@ -271,7 +271,7 @@ Domains: `auth` · `users` · `addresses` · `products` · `categories` · `cart
 | Auth | python-jose (JWT) + passlib (bcrypt) + SHA-256 token hashing |
 | Validation | Pydantic v2 + email-validator + phonenumbers (E.164) |
 | Rate Limiting | SlowAPI is Redis-backed, multi-worker safe |
-| Email | SMTP + tenacity (3-retry exponential backoff) |
+| Email | SMTP via Celery task (3-retry, 60s countdown) |
 | Logging | Structured JSON · rotating file handlers · request ID tracing |
 | Containerization | Docker · docker-compose (local multi-service parity) |
 | Testing | pytest + pytest-asyncio + httpx + pytest-xdist |
@@ -347,7 +347,7 @@ python -m scripts.seed_admin
 - [x] Address management with ownership enforcement
 - [x] Admin: product CRUD, order status FSM, user management
 - [x] RBAC, rate limiting, structured logging, health checks
-- [x] 412 tests · GitHub Actions CI
+- [x] 413 tests · GitHub Actions CI
 - [x] Dockerized: Dockerfile, docker-compose, entrypoint.sh
 - [x] Deployed to Render (web + managed PostgreSQL + Celery worker co-located) + Upstash Redis, HTTPS, auto-deploy from main
 
@@ -368,8 +368,8 @@ python -m scripts.seed_admin
 
 **Epic 2: Payments & Background Jobs**
 - [ ] Stripe integration (checkout session + webhooks)
-- [x] Celery + Upstash Redis task queue infrastructure (worker deployed on Railway)
-- [ ] Move emails to Celery (verification, password reset)
+- [x] Celery + Upstash Redis task queue infrastructure (worker co-located in Render container)
+- [x] Move emails to Celery (verification, password reset, password change)
 - [ ] Order confirmation email on payment
 - [ ] Coupons and promo codes (fixed + percentage discounts, expiry, min order value)
 - [ ] Coupon management (admin: create, disable, list)
