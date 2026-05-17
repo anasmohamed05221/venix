@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from utils.deps import db_dependency
 from starlette import status
 from schemas.auth import (Token, VerifyEmailRequest, CreateUserRequest, ForgotPasswordRequest,
-                          RevokeTokenRequest, RefreshTokenRequest, ResetPasswordRequest)
+                          RevokeTokenRequest, RefreshTokenRequest, ResetPasswordRequest, ResendVerificationRequest)
 from services.auth import AuthService
 from services.token import TokenService
 from middleware.rate_limiter import limiter
@@ -30,8 +30,8 @@ async def create_user(request: Request, body: CreateUserRequest, db: db_dependen
         extra={"user_id": user.id, "email": user.email}
     )
 
-    return {"message": "Registration successful. Please check your email for verification code."}
-    
+    return {"message": "Registration successful. A verification email will be sent to your inbox shortly. If you don't receive it, you can request a new one."}
+
 
 @router.post("/token", response_model=Token)
 @limiter.limit("5/minute")
@@ -100,6 +100,14 @@ async def logout(request: Request, body: RevokeTokenRequest, db: db_dependency):
     logger.info("User logged out")
 
     return {"message": "Logged out successfully"}
+
+
+@router.post("/resend-verification", status_code=status.HTTP_200_OK)
+@limiter.limit("3/minute")
+async def resend_verification(request: Request, body: ResendVerificationRequest, db: db_dependency):
+    """Resend verification email to an unverified account."""
+    await AuthService.resend_verification(db, body.email)
+    return {"message": "If your email is registered and unverified, a new verification code has been sent."}
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)

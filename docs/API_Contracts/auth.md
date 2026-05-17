@@ -33,15 +33,16 @@ Request body:
 ## Response (201 Created)
 
 {
-  "message": "Registration successful. Please check your email for verification code."
+  "message": "Registration successful. A verification email will be sent to your inbox shortly. If you don't receive it, you can request a new one."
 }
 
 ---
 
 ## Notes
 
-- A 6-digit email verification code is sent to the provided email address after registration.
+- A 6-digit email verification code is dispatched asynchronously after registration. It may take a few moments to arrive.
 - The account cannot be used until the email is verified.
+- If the email does not arrive, use `POST /auth/resend-verification` to request a new code.
 
 ---
 
@@ -279,4 +280,42 @@ Request body:
 
 - `400 Bad Request` — invalid or expired reset token.
 - `422 Unprocessable Entity` — password validation failure.
+- `429 Too Many Requests` — rate limit exceeded.
+
+---
+
+# 8. Resend Verification Email
+
+## Request
+
+**POST** `/auth/resend-verification`
+
+Rate limit: 3/minute
+
+Request body:
+
+{
+  "email": "user@example.com"
+}
+
+---
+
+## Response (200 OK)
+
+{
+  "message": "If your email is registered and unverified, a new verification code has been sent."
+}
+
+---
+
+## Notes
+
+- Always returns the same message regardless of whether the email exists (prevents user enumeration).
+- Generates a fresh code and invalidates the previous one.
+- If the account is already verified, this is a no-op.
+
+---
+
+## Errors
+
 - `429 Too Many Requests` — rate limit exceeded.

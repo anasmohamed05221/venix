@@ -188,6 +188,34 @@ class AuthService:
         logger.info("Password reset email sent", extra={"user_id": model.id, "email": model.email})
 
     @staticmethod
+    async def resend_verification(db: AsyncSession, email: str) -> None:
+        """Generate a fresh verification code and re-dispatch the verification email.
+
+        Silent no-op if the email is unknown or already verified — prevents user enumeration.
+        Invalidates any previous code by overwriting it.
+        """
+        user = await db.scalar(select(User).where(User.email == email))
+
+        if not user or user.is_verified:
+            logger.info("Resend verification skipped", extra={"email": email})
+            return
+
+        user.verification_code = generate_verification_code()
+        user.verification_code_expires_at = get_code_expiry_time()
+
+        try:
+            await db.commit()
+        except Exception:
+            logger.error("Resend verification commit failed", extra={"email": email}, exc_info=True)
+            await db.rollback()
+            raise
+
+        subject = "Verify Your Email - E-commerce App"
+        send_email_task.delay(user.email, subject, verification_email(user.verification_code))
+
+        logger.info("Verification email resent", extra={"user_id": user.id, "email": user.email})
+
+    @staticmethod
     async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
         """Apply a new password from a valid reset token and revoke all sessions.
 
