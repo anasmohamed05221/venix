@@ -147,8 +147,9 @@ class CheckoutService:
             )
             if existing_order:
                 session = stripe.checkout.Session.retrieve(existing_order.stripe_checkout_session_id)
-                existing_order.checkout_url = session.url
-                return existing_order
+                if session.status == "open":
+                    existing_order.checkout_url = session.url
+                    return existing_order
 
         # Create order
         total_amount = CartService.calculate_cart_total_price(cart_items)
