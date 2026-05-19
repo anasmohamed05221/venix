@@ -106,13 +106,22 @@ class CheckoutService:
                 idempotency_key=f"checkout-{order.id}"
             )
             order.stripe_checkout_session_id = session.id
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception:
+                logger.error("Stripe session commit failed", extra={"order_id": order.id})
+                await db.rollback()
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Checkout failed, please try again")
             order_eagered = await db.scalar(select(Order).options(joinedload(Order.items).joinedload(OrderItem.product)).where(Order.id==order.id))
             order_eagered.checkout_url = session.url
             return order_eagered
         except stripe.StripeError as e:
             order.payment_status = PaymentStatus.FAILED
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception:
+                logger.error("Failed to persist FAILED status after Stripe error", extra={"order_id": order.id})
+                await db.rollback()
             logger.error("Stripe session creation failed", extra={"order_id": order.id, "error": str(e)})
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Payment provider unavailable, please try again later")
         
