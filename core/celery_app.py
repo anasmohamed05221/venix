@@ -22,4 +22,4 @@ if settings.CELERY_BROKER_URL.startswith("rediss://"):
         redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
     )
 
-celery_app.conf.include = ["tasks.email", "tasks.ping"]
+celery_app.conf.include = ["tasks.emails", "tasks.ping"]

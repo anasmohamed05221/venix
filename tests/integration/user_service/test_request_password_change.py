@@ -13,7 +13,7 @@ async def test_request_password_change_wrong_password(session, verified_user):
 
 async def test_request_password_change_stores_pending_data(session, verified_user):
     """Stores pending hash and token in DB on valid request."""
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         await UserService.request_password_change(session, verified_user, "TestPassword123!", "NewPass123!")
 
     await session.refresh(verified_user)

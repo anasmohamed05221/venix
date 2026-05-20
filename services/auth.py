@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 from core.config import settings
 from services.token import TokenService
 import secrets
-from tasks.email import send_email_task
+from tasks.emails import send_email_task
 
 logger = get_logger(__name__)
 

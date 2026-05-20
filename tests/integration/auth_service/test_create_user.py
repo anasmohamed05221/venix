@@ -16,7 +16,7 @@ async def test_create_user(session):
         password="SecurePass123!",
         phone_number="+201111111111"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         created_user = await AuthService.create_user(user_data, session)
 
     assert created_user.id is not None
@@ -38,7 +38,7 @@ async def test_create_user_duplicate_email(session):
         password="password123",
         phone_number="+201111111111"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         await AuthService.create_user(user_data, session)
         with pytest.raises(HTTPException) as exc_info:
             await AuthService.create_user(user_data, session)

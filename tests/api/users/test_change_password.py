@@ -8,7 +8,7 @@ async def _setup_pending_change(session, user) -> str:
     import secrets as _secrets
     raw_token = _secrets.token_urlsafe(32)
     with patch("services.users.secrets.token_urlsafe", return_value=raw_token):
-        with patch("tasks.email.send_email_task.delay"):
+        with patch("tasks.emails.send_email_task.delay"):
             await UserService.request_password_change(session, user, "TestPassword123!", "NewPass123!")
     return raw_token
 
@@ -24,7 +24,7 @@ async def test_change_password_success(client, verified_user, session):
     access_token = response.json()["access_token"]
 
     # Request password change
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         response = await client.put("/users/me/password",
             headers={"Authorization": f"Bearer {access_token}"},
             json={
@@ -144,7 +144,7 @@ async def test_deny_password_change_success(client, verified_user, session):
     """Valid token in request body cancels the pending password change."""
     token = await _setup_pending_change(session, verified_user)
 
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         response = await client.post("/users/deny-password-change", json={"token": token})
 
     assert response.status_code == 200

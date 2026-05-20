@@ -15,7 +15,7 @@ async def test_get_user_by_email(session):
         password="password123",
         phone_number="+201234567890"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         await AuthService.create_user(user_data, session)
 
     found_user = await session.scalar(select(User).where(User.email == "find@example.com"))
@@ -35,7 +35,7 @@ async def test_deactivate_user(session):
         password="password123",
         phone_number="+201111111111"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         created_user = await AuthService.create_user(user_data, session)
 
     created_user.is_active = False

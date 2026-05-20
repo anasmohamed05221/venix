@@ -14,7 +14,7 @@ async def test_authenticate_user_success(session):
         password="SecurePass123!",
         phone_number="+201111111111"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         created_user = await AuthService.create_user(user_data, session)
     created_user.is_verified = True
     await session.commit()
@@ -32,7 +32,7 @@ async def test_login_unverified_user(session):
         password="SecurePass123!",
         phone_number="+201111111111"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         await AuthService.create_user(user_data, session)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -51,7 +51,7 @@ async def test_authenticate_user_wrong_password(session):
         password="SecurePass123!",
         phone_number="+201111111111"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         created_user = await AuthService.create_user(user_data, session)
     created_user.is_verified = True
     await session.commit()
@@ -70,7 +70,7 @@ async def test_login_inactive_user(session):
         password="SecurePass123!",
         phone_number="+201111111111"
     )
-    with patch("tasks.email.send_email_task.delay"):
+    with patch("tasks.emails.send_email_task.delay"):
         created_user = await AuthService.create_user(user_data, session)
     created_user.is_verified = True
     created_user.is_active = False

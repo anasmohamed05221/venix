@@ -12,7 +12,7 @@ from utils.email_templates import password_change_request_email, password_change
 from services.token import TokenService
 from core.config import settings
 from utils.hashing import verify_password, get_password_hash, hash_token
-from tasks.email import send_email_task
+from tasks.emails import send_email_task
 
 from typing import Optional
 

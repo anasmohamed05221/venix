@@ -85,7 +85,7 @@ class WebhookService:
         order.payment_status = PaymentStatus.PAID
         order.status = OrderStatus.CONFIRMED
         logger.info("Order confirmed after payment", extra={"order_id": order.id})
-        #Enqueue send_order_confirmation_task postponed until i create the task, and method at email service
+        Enqueue send_order_confirmation_task postponed until i create the task, and method at email service
         new_event = ProcessedWebhookEvent(event_id=event_id)
         db.add(new_event)
 

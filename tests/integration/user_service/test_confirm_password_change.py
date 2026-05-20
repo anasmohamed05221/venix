@@ -11,7 +11,7 @@ async def _setup_pending_change(session, user):
     import secrets as _secrets
     raw_token = _secrets.token_urlsafe(32)
     with patch("services.users.secrets.token_urlsafe", return_value=raw_token):
-        with patch("tasks.email.send_email_task.delay"):
+        with patch("tasks.emails.send_email_task.delay"):
             await UserService.request_password_change(session, user, "TestPassword123!", "NewPass123!")
     return raw_token
 
