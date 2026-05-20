@@ -61,11 +61,12 @@ class WebhookService:
         if order.payment_status == PaymentStatus.PAID:
             return
         
-        order_items = (await db.execute(
+        result = await db.execute(
             select(OrderItem)
             .options(joinedload(OrderItem.product))
-            .where(OrderItem.order_id == order.id)).scalars().all()
+            .where(OrderItem.order_id == order.id)
         )
+        order_items = result.scalars().all()
 
         for item in order_items:
             product = item.product
