@@ -12,6 +12,9 @@ class Tenant(Base, CreatedAtMixin):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7)
 
     name = Column(String(100), nullable=False)
+    owner_email = Column(String(255), unique=True, nullable=False, index=True)
+    owner_password_hash = Column(String(255), nullable=False)
+    db_url = Column(String(500), nullable=True)
     slug = Column(String(50), unique=True, nullable=False, index=True)
     plan = Column(Enum(PlanTier, values_callable=lambda obj: [e.value for e in obj], name="plantier"), default=PlanTier.FREE, nullable=False)
     api_key_hash = Column(String(64), unique=True, nullable=False, index=True)
