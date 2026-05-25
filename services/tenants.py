@@ -14,7 +14,7 @@ class TenantService:
     """Handles tenant registration and lifecycle operations."""
 
     @staticmethod
-    async def register_tenant(name: str, slug: str, email: str, password: str, plan: PlanTier, db: AsyncSession) -> tuple[Tenant, str]:
+    async def register_tenant(db: AsyncSession, name: str, slug: str, email: str, password: str, plan: PlanTier) -> tuple[Tenant, str]:
         """Create a new tenant, hash credentials, and return the tenant with its plaintext API key."""
         api_key_plaintext = "vnx_" + secrets.token_urlsafe(32)
         api_key_hash = hash_token(api_key_plaintext)
