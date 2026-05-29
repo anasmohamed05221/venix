@@ -123,3 +123,256 @@ No request body.
 ## Errors
 
 - `401 Unauthorized` — no valid tenant resolved from the request.
+
+---
+
+# 4. Get Tenant Profile
+
+## Request
+
+**GET** `/tenants/me`
+
+Auth: `X-Tenant-API-Key` header or `Authorization: Bearer <jwt>`
+
+No request body.
+
+## Response (200 OK)
+
+```json
+{
+  "id": "<uuid7>",
+  "name": "Acme Store",
+  "slug": "acme-store",
+  "owner_email": "owner@acme.com",
+  "plan": "free",
+  "is_active": true,
+  "is_verified": false,
+  "created_at": "<iso8601>"
+}
+```
+
+## Notes
+
+- Never returns: `owner_password_hash`, `api_key_hash`, `stripe_secret_key`, `stripe_webhook_secret`, `db_url`, `password_change_code`.
+
+## Errors
+
+- `401 Unauthorized` — no valid tenant resolved.
+
+---
+
+# 5. Update Tenant Profile
+
+## Request
+
+**PUT** `/tenants/me`
+
+Auth: `X-Tenant-API-Key` header or `Authorization: Bearer <jwt>`
+
+```json
+{
+  "name": "Acme Store Updated"
+}
+```
+
+## Validation Rules
+
+- `name`: optional, 1–100 characters.
+
+## Response (200 OK)
+
+Returns updated `TenantProfileOut` (same shape as `GET /tenants/me`).
+
+## Notes
+
+- `slug` is immutable — not accepted in this request body.
+
+## Errors
+
+- `401 Unauthorized` — no valid tenant resolved.
+- `422 Unprocessable Entity` — name fails length validation.
+
+---
+
+# 6. Verify Email
+
+## Request
+
+**POST** `/tenants/me/verify-email`
+
+Auth: `X-Tenant-API-Key` header or `Authorization: Bearer <jwt>`
+
+Rate limit: 5/minute per tenant
+
+```json
+{
+  "code": "847291"
+}
+```
+
+## Response (200 OK)
+
+```json
+{
+  "message": "Email verified successfully."
+}
+```
+
+## Notes
+
+- Code is a 6-digit numeric string, expires in 10 minutes.
+- Authenticated endpoint — explicit errors (no silent no-op, no enumeration risk).
+- Wrong code does NOT clear the code — it expires naturally. Rate limiting prevents brute force.
+
+## Errors
+
+- `400 Bad Request` — invalid code, expired code, or email already verified.
+- `401 Unauthorized` — no valid tenant resolved.
+
+---
+
+# 7. Resend Verification Email
+
+## Request
+
+**POST** `/tenants/me/resend-verification`
+
+Auth: `X-Tenant-API-Key` header or `Authorization: Bearer <jwt>`
+
+Rate limit: 3/minute per tenant
+
+No request body.
+
+## Response (200 OK)
+
+```json
+{
+  "message": "Verification email sent."
+}
+```
+
+## Notes
+
+- Regenerates code and expiry — invalidates any previous code.
+- Authenticated endpoint — explicit 400 if already verified (no silent no-op).
+
+## Errors
+
+- `400 Bad Request` — email already verified.
+- `401 Unauthorized` — no valid tenant resolved.
+
+---
+
+# 8. Initiate Password Change
+
+## Request
+
+**POST** `/tenants/me/initiate-change-password`
+
+Auth: `X-Tenant-API-Key` header or `Authorization: Bearer <jwt>`
+
+Rate limit: 3/minute per tenant
+
+```json
+{
+  "current_password": "current-secret"
+}
+```
+
+## Response (200 OK)
+
+```json
+{
+  "message": "A confirmation code has been sent to your email."
+}
+```
+
+## Notes
+
+- Verifies `current_password` against `owner_password_hash` before sending code.
+- Code is a 6-digit numeric string, expires in 15 minutes.
+- Code is stored as SHA256 hash in DB — plaintext never persisted.
+- Email sent from `no-reply@venix.website` (Venix platform account).
+
+## Errors
+
+- `401 Unauthorized` — incorrect current password, or no valid tenant resolved.
+
+---
+
+# 9. Change Password
+
+## Request
+
+**POST** `/tenants/me/change-password`
+
+Auth: `X-Tenant-API-Key` header or `Authorization: Bearer <jwt>`
+
+Rate limit: 3/minute per tenant
+
+```json
+{
+  "code": "847291",
+  "new_password": "new-secret-password"
+}
+```
+
+## Response (200 OK)
+
+```json
+{
+  "message": "Password changed successfully. All sessions have been revoked."
+}
+```
+
+## Notes
+
+- Validates code + expiry in one atomic request with the new password — no separate confirm step.
+- Applies new hash to `tenant.owner_password_hash` AND syncs `User.hashed_password` for the auto-provisioned admin user (shared credential from Story 4.5).
+- Revokes all admin User JWT sessions after applying the change.
+- Code fields are cleared after successful change — code cannot be reused.
+
+## Errors
+
+- `400 Bad Request` — invalid or expired code.
+- `401 Unauthorized` — no valid tenant resolved.
+- `422 Unprocessable Entity` — new password fails strength validation.
+
+---
+
+# 10. Deactivate Account
+
+## Request
+
+**POST** `/tenants/deactivate`
+
+Auth: `X-Tenant-API-Key` header or `Authorization: Bearer <jwt>`
+
+Rate limit: 3/minute per tenant
+
+```json
+{
+  "password": "current-secret"
+}
+```
+
+## Response (200 OK)
+
+```json
+{
+  "message": "Account deactivated."
+}
+```
+
+## Notes
+
+- Requires `is_verified=True` — unverified accounts cannot be deactivated.
+- Sets `is_active=False`. All subsequent requests return 403 from the middleware.
+- Invalidates both Redis cache entries (`tenant:apikey:{hash}` and `tenant:id:{uuid}`) immediately after DB commit.
+- This is NOT key revocation — see `DELETE /tenants/me/api-key` (Story 2.5). Deactivation disables the entire account.
+- Reactivation requires super-admin action (deferred).
+
+## Errors
+
+- `401 Unauthorized` — incorrect password, or no valid tenant resolved.
+- `403 Forbidden` — tenant is not verified.

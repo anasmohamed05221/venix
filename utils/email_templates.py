@@ -176,6 +176,60 @@ def password_change_denied_email() -> str:
     return _wrap(content, header_color="#ef4444")
 
 
+def tenant_verification_email(code: str) -> str:
+    """HTML email sent to a tenant owner to verify their store email address."""
+    content = f"""
+      <h2 style="margin:0 0 8px;color:#0a0a0a;font-size:22px;font-weight:700;">Verify your tenant email</h2>
+      <p style="margin:0 0 32px;color:#71717a;font-size:15px;line-height:1.6;">
+        Welcome to Venix. Use the code below to verify the email address for your tenant.
+        It expires in <strong style="color:#0a0a0a;">10 minutes</strong>.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+        <tr>
+          <td align="center"
+              style="background-color:#f4f4f5;border:1px solid #d4d4d8;
+                     border-radius:12px;padding:32px;">
+            <span style="font-size:40px;font-weight:700;letter-spacing:14px;color:#0a0a0a;">
+              {code}
+            </span>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0;color:#71717a;font-size:13px;line-height:1.6;">
+        If you didn't register a tenant, you can safely ignore this email.
+      </p>
+    """
+    return _wrap(content)
+
+
+def tenant_password_change_code_email(code: str) -> str:
+    """HTML email sent to a tenant owner with a confirmation code to complete a password change."""
+    content = f"""
+      <h2 style="margin:0 0 8px;color:#0a0a0a;font-size:22px;font-weight:700;">Confirm your password change</h2>
+      <p style="margin:0 0 32px;color:#71717a;font-size:15px;line-height:1.6;">
+        A password change was requested for your tenant account. Use the code below to confirm it.
+        It expires in <strong style="color:#0a0a0a;">15 minutes</strong>.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+        <tr>
+          <td align="center"
+              style="background-color:#f4f4f5;border:1px solid #d4d4d8;
+                     border-radius:12px;padding:32px;">
+            <span style="font-size:40px;font-weight:700;letter-spacing:14px;color:#0a0a0a;">
+              {code}
+            </span>
+          </td>
+        </tr>
+      </table>
+
+      {_info_box("<strong>Didn't request this?</strong> Ignore this email &mdash; your password will remain unchanged. Consider reviewing your account security.")}
+    """
+    return _wrap(content)
+
+
 def order_confirmation_email(order_id: int, total_amount: str, items: list[dict]) -> str:
     rows = "".join([
         f"""

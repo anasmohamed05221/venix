@@ -78,6 +78,7 @@ async def test_conflict_guard_returns_403(client, mock_db, valid_tenant):
     other_tenant.plan.value = "free"
     other_tenant.api_key_hash = "otherhash"
     other_tenant.owner_email = "other@test.com"
+    other_tenant.is_verified = True
 
     mock_db.scalar.side_effect = [valid_tenant, other_tenant]
 

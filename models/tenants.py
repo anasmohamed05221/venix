@@ -1,5 +1,5 @@
 from core.database import Base
-from sqlalchemy import Column, String, Enum, Boolean
+from sqlalchemy import Column, String, Enum, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from uuid6 import uuid7
@@ -29,5 +29,10 @@ class Tenant(Base, CreatedAtMixin):
     plan = Column(Enum(PlanTier, values_callable=lambda obj: [e.value for e in obj], name="plantier"), default=PlanTier.FREE, nullable=False)
     api_key_hash = Column(String(64), unique=True, nullable=True, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    verification_code = Column(String(6), nullable=True)
+    verification_code_expires_at = Column(DateTime(timezone=True), nullable=True)
+    password_change_code = Column(String(64), nullable=True)
+    password_change_code_expires_at = Column(DateTime(timezone=True), nullable=True)
     stripe_secret_key = Column(String(500), nullable=True)
     stripe_webhook_secret = Column(String(500), nullable=True)

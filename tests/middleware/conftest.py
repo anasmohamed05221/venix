@@ -40,6 +40,7 @@ def _make_tenant_mock(is_active: bool) -> MagicMock:
     tenant.plan.value = "free"
     tenant.api_key_hash = hashlib.sha256(VALID_API_KEY.encode()).hexdigest()
     tenant.owner_email = "owner@test.com"
+    tenant.is_verified = True
     return tenant
 
 
